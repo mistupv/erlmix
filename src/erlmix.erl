@@ -57,7 +57,7 @@ mixproc([{Proc,Exp}|R],Seen,Msgs) ->
 %% @doc Selects the messages to a given process
 %% @end
 %%--------------------------------------------------------------------
-select_msgs(Pid,[]) -> io:format("Error: no messages for pid: ~p\n",[Pid]),[];
+select_msgs(Pid,[]) -> io:format("Warning: no messages for pid: ~p\n",[Pid]),[];
 select_msgs(Pid1,[{Pid2,Ms}|R]) ->
   case Pid1==Pid2 of
     true -> Ms;
@@ -81,6 +81,7 @@ add_calls([{Proc,E}|R],Seen) ->
 %% @end
 %%--------------------------------------------------------------------
 peval(Ms,Exp,Ancestors) ->
+  %%io:format("Exp: ~p\n",[Exp]),
   case utils:is_pattern(Exp) of
     true -> Exp;
     false -> 
@@ -186,6 +187,7 @@ peval(Ms,Exp,Ancestors) ->
                       ConcArgs = [utils:toErlang(Arg) || Arg <- CallArgs],
                       ConcExp = apply(ConcModule, ConcName, ConcArgs),
                       StrExp = lists:flatten(io_lib:format("~p", ([ConcExp]))) ++ ".",
+                      %%io:format("ConcModule: ~p\nConcName: ~p\nConcArgs: ~p\nConcExp: ~p\nStrExp: ~p\n",[ConcModule,ConcName,ConcArgs,ConcExp,StrExp]),
                       {ok, ParsedExp, _} = erl_scan:string(StrExp),
                       {ok, TypedExp} = erl_parse:parse_exprs(ParsedExp),
                       hd([utils:toCore(Expr) || Expr <- TypedExp])
@@ -260,7 +262,7 @@ successors(Pid,Exp) ->
             [Proc,_,{c_literal,[],Fun},Args] = cerl:apply_args(Exp),
             Args2 = cerl:list_elements(Args),
             Arity = length(Args2),
-            % io:format("myspawn: ~p\n",[cerl:c_apply({c_var,[],{Fun,Arity}}, Args2)]),
+            %%io:format("myspawn: ~p\n",[cerl:c_apply({c_var,[],{Fun,Arity}}, Args2)]),
             [{Proc,cerl:c_apply({c_var,[],{Fun,Arity}}, Args2)}];
         _ -> [{Pid,Exp}]
       end;
@@ -269,7 +271,20 @@ successors(Pid,Exp) ->
     'let' ->
       successors(Pid,cerl:let_arg(Exp))++successors(Pid,cerl:let_body(Exp));
     call ->
-      [];
+      CallArgs = cerl:call_args(Exp),
+      CallModule = cerl:call_module(Exp),
+      CallName = cerl:call_name(Exp),
+      % here we assume CallModule and CallName have always a value
+      case {CallModule, CallName} of
+        {{c_literal,_,'erlang'},{c_literal,_,'spawn'}} -> 
+                [_,{c_literal,[],FunOp},ConsArgs] = CallArgs,
+                NewArgs = cerl:list_elements(ConsArgs),
+                Arity = length(NewArgs),
+                NewFun = cerl:c_var({FunOp,Arity}),
+                NewExp = cerl:c_apply(NewFun,NewArgs),
+                [{Pid,NewExp}];
+        _ -> []
+      end;
     seq ->
       successors(Pid,cerl:seq_arg(Exp))++successors(Pid,cerl:seq_body(Exp));
     'receive' ->

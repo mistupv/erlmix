@@ -1,5 +1,5 @@
--module(ex).
--compile(export_all).
+-module(ex1).
+-export([main/2,client/2]).
 
 main(N,L) -> S=self(),register(main,S),no_init(N,L), no_server().
 
@@ -12,7 +12,7 @@ server() -> receive
 
 init(N,L) -> case N of
                   0 -> done;
-                  M when M>0 -> myspawn(list_to_atom("client" ++ integer_to_list(M)),ex,client,[M,L]), 
+                  M when M>0 -> myspawn(list_to_atom("client" ++ integer_to_list(M)),ex1,client,[M,L]), 
                                 init(M-1,L)
              end.
 
@@ -31,19 +31,10 @@ aux(X,N) -> case N of
               M when M>0 -> [X|aux(X,M-1)]
             end.
 
-%% peval stuff
+%% peval stuff: my spawn is used to fix a name for every spawned process
 myspawn(Name,Mod,Fun,Args) -> C = spawn(Mod,Fun,Args), register(Name,C).
+%% functions prefixed with no_ are not unfolded
 no_init(N,L) -> init(N,L).
 no_server() -> server().
 no_rep(L,N) -> rep(L,N).
 
-  % Pid=spawn(Mod,Fun,Args), 
-  % register(Name,Pid). 
-
-% bench() ->
-%   N = 6,
-%   L = [a,b,c],
-%   T1 = erlang:system_time(millisecond),
-%        main(N,L),
-%   T2 = erlang:system_time(millisecond),
-%   T2-T1.
